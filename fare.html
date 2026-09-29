@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>旅費計算</title>
+<style>
+  :root {
+    --bg: #F4F5F1;
+    --card: #FFFFFF;
+    --ink: #1E2A24;
+    --ink-soft: #55635B;
+    --line: #DDE2DA;
+    --route: #2B6F5C;
+    --route-soft: #E4EEEA;
+    --fare: #B9762F;
+    --fare-soft: #FBF0E1;
+    --danger: #B4432F;
+    --danger-soft: #FBEDE9;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", "Segoe UI", sans-serif;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    padding: 40px 16px;
+  }
+  .wrap { width: 100%; max-width: 480px; }
+
+  /* Signature header: a dashed route between two pins */
+  .route-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 28px;
+    padding: 0 4px;
+  }
+  .route-svg { flex-shrink: 0; }
+  .header-text h1 {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+  }
+  .header-text p {
+    margin: 2px 0 0;
+    font-size: 13px;
+    color: var(--ink-soft);
+  }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 24px;
+    margin-bottom: 16px;
+  }
+
+  .field { margin-bottom: 16px; }
+  .field:last-child { margin-bottom: 0; }
+  .field label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ink-soft);
+    margin-bottom: 6px;
+    letter-spacing: 0.02em;
+  }
+  .field input {
+    width: 100%;
+    padding: 11px 12px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    font-size: 15px;
+    color: var(--ink);
+    background: #FCFCFB;
+    transition: border-color 0.15s;
+  }
+  .field input:focus {
+    outline: none;
+    border-color: var(--route);
+    background: #fff;
+  }
+
+  .candidates {
+    margin-top: 8px;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    overflow: hidden;
+    background: #FCFCFB;
+  }
+  .candidates .candidates-hint {
+    font-size: 11.5px;
+    color: var(--ink-soft);
+    padding: 8px 12px;
+    background: var(--route-soft);
+  }
+  .candidate-item {
+    padding: 10px 12px;
+    font-size: 13px;
+    color: var(--ink);
+    cursor: pointer;
+    border-top: 1px solid var(--line);
+    line-height: 1.5;
+  }
+  .candidate-item:hover { background: var(--route-soft); }
+  .selected-place {
+    margin-top: 6px;
+    font-size: 12px;
+    color: var(--route);
+    display: flex;
+    align-items: baseline;
+    gap: 5px;
+  }
+  .selected-place .change-link {
+    color: var(--ink-soft);
+    text-decoration: underline;
+    cursor: pointer;
+    margin-left: 4px;
+  }
+
+  .swap-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .swap-row .field { flex: 1; margin-bottom: 0; }
+  .swap-btn {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    border: 1px solid var(--line);
+    background: #FCFCFB;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--ink-soft);
+    flex-shrink: 0;
+    margin-top: 18px;
+    transition: background 0.15s, transform 0.15s;
+  }
+  .swap-btn:hover { background: var(--route-soft); color: var(--route); transform: rotate(180deg); }
+
+  .stack-fields { display: flex; flex-direction: column; gap: 14px; margin-bottom: 4px; }
+
+  button.primary {
+    width: 100%;
+    margin-top: 20px;
+    padding: 13px;
+    border: none;
+    border-radius: 9px;
+    background: var(--route);
+    color: #fff;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    letter-spacing: 0.02em;
+    transition: background 0.15s, opacity 0.15s;
+  }
+  button.primary:hover { background: #245c4c; }
+  button.primary:disabled { opacity: 0.55; cursor: default; }
+
+  .settings-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12.5px;
+    color: var(--ink-soft);
+    cursor: pointer;
+    padding: 4px 2px;
+    user-select: none;
+    width: fit-content;
+  }
+  .settings-toggle:hover { color: var(--ink); }
+  .settings-panel {
+    margin-top: 12px;
+    padding-top: 14px;
+    border-top: 1px dashed var(--line);
+    display: none;
+  }
+  .settings-panel.open { display: block; }
+  .settings-panel .hint {
+    font-size: 12px;
+    color: var(--ink-soft);
+    margin: 6px 0 10px;
+    line-height: 1.6;
+  }
+  .settings-panel .hint a { color: var(--route); }
+  .save-key-btn {
+    padding: 8px 14px;
+    border: 1px solid var(--route);
+    color: var(--route);
+    background: #fff;
+    border-radius: 7px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 10px;
+  }
+  .save-key-btn:hover { background: var(--route-soft); }
+  .key-status {
+    font-size: 12px;
+    margin-top: 8px;
+    color: var(--ink-soft);
+  }
+  .key-status.ok { color: var(--route); }
+
+  /* Result */
+  .result {
+    margin-top: 16px;
+    border-radius: 14px;
+    padding: 22px 24px;
+    background: var(--fare-soft);
+    border: 1px solid #EFD9BB;
+  }
+  .result .route-line {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--ink-soft);
+    margin-bottom: 14px;
+    line-height: 1.5;
+  }
+  .result .distance-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-size: 13px;
+    color: var(--ink-soft);
+    margin-bottom: 6px;
+  }
+  .result .distance-row strong { color: var(--ink); font-size: 14px; }
+  .result .fare-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid #EFD9BB;
+  }
+  .result .fare-label { font-size: 13px; color: var(--ink-soft); }
+  .result .fare-amount { font-size: 30px; font-weight: 800; color: var(--fare); letter-spacing: -0.01em; }
+
+  .error-box {
+    margin-top: 16px;
+    border-radius: 12px;
+    padding: 16px 18px;
+    background: var(--danger-soft);
+    border: 1px solid #EAC5BB;
+    color: var(--danger);
+    font-size: 13.5px;
+    line-height: 1.6;
+  }
+
+  .loading {
+    margin-top: 16px;
+    font-size: 13.5px;
+    color: var(--ink-soft);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .spinner {
+    width: 14px; height: 14px;
+    border: 2px solid var(--line);
+    border-top-color: var(--route);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .footnote {
+    font-size: 11.5px;
+    color: var(--ink-soft);
+    text-align: center;
+    margin-top: 18px;
+    line-height: 1.6;
+    padding: 0 12px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="route-header">
+    <svg class="route-svg" width="46" height="28" viewBox="0 0 46 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="6" cy="21" r="4.5" fill="#2B6F5C"/>
+      <path d="M11 19 Q 20 4 40 8" stroke="#2B6F5C" stroke-width="2" stroke-dasharray="1 5" stroke-linecap="round" fill="none"/>
+      <path d="M36 4 L40 8 L36 12" stroke="#2B6F5C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    </svg>
+    <div class="header-text">
+      <h1>旅費計算</h1>
+      <p>出発地と目的地から、下道ルートの距離をもとに旅費を算出します</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="swap-row">
+      <div class="field">
+        <label for="origin">出発地</label>
+        <input id="origin" type="text" placeholder="例:本社、学校名、住所" autocomplete="off">
+        <div id="originCandidates"></div>
+      </div>
+      <button class="swap-btn" id="swapBtn" title="入れ替え" aria-label="出発地と目的地を入れ替え">⇅</button>
+      <div class="field">
+        <label for="destination">目的地</label>
+        <input id="destination" type="text" placeholder="例:建物名、学校名、住所" autocomplete="off">
+        <div id="destCandidates"></div>
+      </div>
+    </div>
+
+    <button class="primary" id="calcBtn">距離と旅費を計算する</button>
+
+    <div class="settings-toggle" id="settingsToggle">
+      <span id="toggleIcon">▸</span> APIキー設定
+    </div>
+    <div class="settings-panel" id="settingsPanel">
+      <div class="hint">
+        ルート計算には OpenRouteService の無料APIキーが必要です。
+        <a href="https://openrouteservice.org/dev/#/signup" target="_blank" rel="noopener">openrouteservice.org</a>
+        で無料登録すると発行されます。この端末にのみ保存され、計算のたびに毎回送信されます。
+      </div>
+      <div class="field">
+        <label for="apiKey">OpenRouteService APIキー</label>
+        <input id="apiKey" type="text" placeholder="ここにAPIキーを貼り付け" autocomplete="off">
+      </div>
+      <button class="save-key-btn" id="saveKeyBtn">保存する</button>
+      <div class="key-status" id="keyStatus"></div>
+    </div>
+  </div>
+
+  <div id="resultArea"></div>
+
+  <div class="footnote">
+    住所検索は OpenStreetMap(Nominatim)、ルート計算は OpenRouteService を利用しています。距離は高速道路・有料道路を使わないルートで算出し、旅費表の参照には小数点以下を切り上げています。
+  </div>
+
+</div>
+
+<script>
+  // ---- Fare table: [maxKmInclusive, fareYen] ----
+  const FARE_TABLE = [
+    [5,200],[7,300],[11,400],[13,500],[16,600],[19,700],[22,800],[25,900],
+    [28,1000],[31,1100],[34,1200],[39,1300],[44,1400],[47,1500],[49,1600],
+    [51,1700],[54,1800],[57,1900],[60,2000],[63,2100],[66,2200],[69,2300],
+    [72,2400],[75,2500],[78,2600],[81,2700],[84,2800],[87,2900],[90,3000],
+    [93,3100],[96,3200],[99,3300],[102,3400],[105,3500],[108,3600],[111,3700],
+    [114,3800],[117,3900],[120,4000],[123,4100],[126,4200],[129,4300],
+    [132,4400],[135,4500],[138,4600],[141,4700],[144,4800],[147,4900],
+    [Infinity,5000]
+  ];
+
+  function lookupFare(km) {
+    const rounded = Math.max(1, Math.ceil(km));
+    for (const [maxKm, fare] of FARE_TABLE) {
+      if (rounded <= maxKm) return { rounded, fare };
+    }
+    return { rounded, fare: 5000 };
+  }
+
+  const originInput = document.getElementById('origin');
+  const destInput = document.getElementById('destination');
+  const calcBtn = document.getElementById('calcBtn');
+  const resultArea = document.getElementById('resultArea');
+  const swapBtn = document.getElementById('swapBtn');
+
+  const settingsToggle = document.getElementById('settingsToggle');
+  const settingsPanel = document.getElementById('settingsPanel');
+  const toggleIcon = document.getElementById('toggleIcon');
+  const apiKeyInput = document.getElementById('apiKey');
+  const saveKeyBtn = document.getElementById('saveKeyBtn');
+  const keyStatus = document.getElementById('keyStatus');
+
+  let savedApiKey = '';
+
+  async function loadApiKey() {
+    try {
+      const res = await window.storage.get('ors_api_key', false);
+      if (res && res.value) {
+        savedApiKey = res.value;
+        apiKeyInput.value = savedApiKey;
+        keyStatus.textContent = '保存済みのAPIキーを読み込みました。';
+        keyStatus.classList.add('ok');
+      }
+    } catch (e) {
+      // no key saved yet
+    }
+  }
+  loadApiKey();
+
+  settingsToggle.addEventListener('click', () => {
+    const open = settingsPanel.classList.toggle('open');
+    toggleIcon.textContent = open ? '▾' : '▸';
+  });
+
+  saveKeyBtn.addEventListener('click', async () => {
+    const val = apiKeyInput.value.trim();
+    if (!val) {
+      keyStatus.textContent = 'APIキーを入力してください。';
+      keyStatus.classList.remove('ok');
+      return;
+    }
+    try {
+      await window.storage.set('ors_api_key', val, false);
+      savedApiKey = val;
+      keyStatus.textContent = '保存しました。';
+      keyStatus.classList.add('ok');
+    } catch (e) {
+      keyStatus.textContent = '保存に失敗しました。もう一度お試しください。';
+      keyStatus.classList.remove('ok');
+    }
+  });
+
+  swapBtn.addEventListener('click', () => {
+    const tmp = originInput.value;
+    originInput.value = destInput.value;
+    destInput.value = tmp;
+    const tmpSel = selected.origin;
+    selected.origin = selected.dest;
+    selected.dest = tmpSel;
+    renderCandidateState('origin');
+    renderCandidateState('dest');
+  });
+
+  // Selection state per field: { query, lat, lon, label } | null
+  const selected = { origin: null, dest: null };
+  const candidateEls = {
+    origin: document.getElementById('originCandidates'),
+    dest: document.getElementById('destCandidates')
+  };
+  const fieldInputs = { origin: originInput, dest: destInput };
+
+  // Clear a field's confirmed selection whenever its text is edited
+  originInput.addEventListener('input', () => { selected.origin = null; candidateEls.origin.innerHTML = ''; });
+  destInput.addEventListener('input', () => { selected.dest = null; candidateEls.dest.innerHTML = ''; });
+
+  async function searchCandidates(query) {
+    // Search with Japan bias first (covers most school names); fall back to unrestricted search.
+    const base = 'https://nominatim.openstreetmap.org/search?format=json&limit=5&addressdetails=1&accept-language=ja&q=' + encodeURIComponent(query);
+    let res = await fetch(base + '&countrycodes=jp', { headers: { 'Accept': 'application/json' } });
+    if (!res.ok) throw new Error('住所検索サービスに接続できませんでした。');
+    let data = await res.json();
+    if (!data || data.length === 0) {
+      res = await fetch(base, { headers: { 'Accept': 'application/json' } });
+      if (res.ok) data = await res.json();
+    }
+    if (!data || data.length === 0) {
+      throw new Error('「' + query + '」の場所が見つかりませんでした。都道府県名や市区町村名を加えてお試しください(例:「〇〇市 △△小学校」)。');
+    }
+    return data.map(d => ({
+      lat: parseFloat(d.lat),
+      lon: parseFloat(d.lon),
+      label: d.display_name
+    }));
+  }
+
+  function renderCandidateState(field) {
+    const el = candidateEls[field];
+    const sel = selected[field];
+    if (sel) {
+      el.innerHTML = `<div class="selected-place">✓ ${escapeHtml(shortenLabel(sel.label))}<span class="change-link" data-field="${field}">変更</span></div>`;
+      el.querySelector('.change-link').addEventListener('click', () => {
+        selected[field] = null;
+        el.innerHTML = '';
+        fieldInputs[field].focus();
+      });
+    } else {
+      el.innerHTML = '';
+    }
+  }
+
+  function renderCandidateList(field, candidates) {
+    const el = candidateEls[field];
+    let html = '<div class="candidates"><div class="candidates-hint">候補が複数見つかりました。正しい場所を選んでください</div>';
+    candidates.forEach((c, i) => {
+      html += `<div class="candidate-item" data-field="${field}" data-idx="${i}">${escapeHtml(shortenLabel(c.label))}</div>`;
+    });
+    html += '</div>';
+    el.innerHTML = html;
+    el.querySelectorAll('.candidate-item').forEach(item => {
+      item.addEventListener('click', () => {
+        const idx = parseInt(item.getAttribute('data-idx'), 10);
+        selected[field] = candidates[idx];
+        renderCandidateState(field);
+        if (selected.origin && selected.dest) calcBtn.click();
+      });
+    });
+  }
+
+  function shortenLabel(label) {
+    // Nominatim display_name is long; keep it but it's fine to show in full for clarity
+    return label;
+  }
+
+  // Resolves a field to a single selected place. Returns null and renders
+  // a candidate list (pausing the flow) if the user still needs to choose.
+  async function resolveField(field, query) {
+    if (selected[field] && selected[field].query === query) return selected[field];
+    if (selected[field]) return selected[field]; // already confirmed via manual pick
+    const candidates = await searchCandidates(query);
+    if (candidates.length === 1) {
+      candidates[0].query = query;
+      selected[field] = candidates[0];
+      renderCandidateState(field);
+      return selected[field];
+    }
+    renderCandidateList(field, candidates.map(c => ({ ...c, query })));
+    return null;
+  }
+
+  async function routeDistanceKm(from, to, apiKey) {
+    const url = 'https://api.openrouteservice.org/v2/directions/driving-car';
+    const body = {
+      coordinates: [[from.lon, from.lat], [to.lon, to.lat]],
+      options: { avoid_features: ['highways', 'tollways'] }
+    };
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': apiKey,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(body)
+    });
+    if (res.status === 401 || res.status === 403) {
+      throw new Error('APIキーが正しくないか、権限がありません。設定を確認してください。');
+    }
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error('ルート検索に失敗しました。出発地・目的地が離れすぎている、または道路が見つからない可能性があります。');
+    }
+    const data = await res.json();
+    const meters = data && data.routes && data.routes[0] && data.routes[0].summary && data.routes[0].summary.distance;
+    if (typeof meters !== 'number') {
+      throw new Error('ルートの距離を取得できませんでした。');
+    }
+    return meters / 1000;
+  }
+
+  function renderLoading() {
+    resultArea.innerHTML = '<div class="loading"><div class="spinner"></div>計算しています…</div>';
+  }
+
+  function renderError(message) {
+    resultArea.innerHTML = '<div class="error-box">' + message + '</div>';
+  }
+
+  function renderResult({ originLabel, destLabel, km, rounded, fare }) {
+    resultArea.innerHTML = `
+      <div class="result">
+        <div class="route-line">📍 ${escapeHtml(originLabel)} → ${escapeHtml(destLabel)}</div>
+        <div class="distance-row"><span>実測距離(片道)</span><strong>${km.toFixed(1)} km</strong></div>
+        <div class="distance-row"><span>旅費表の参照距離(切り上げ)</span><strong>${rounded} km</strong></div>
+        <div class="fare-row">
+          <span class="fare-label">旅費(往復分)</span>
+          <span class="fare-amount">¥${fare.toLocaleString()}</span>
+        </div>
+      </div>
+    `;
+  }
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  calcBtn.addEventListener('click', async () => {
+    const originQuery = originInput.value.trim();
+    const destQuery = destInput.value.trim();
+
+    if (!originQuery || !destQuery) {
+      renderError('出発地と目的地の両方を入力してください。');
+      return;
+    }
+    if (!savedApiKey) {
+      renderError('先に「APIキー設定」からOpenRouteServiceのAPIキーを保存してください。');
+      settingsPanel.classList.add('open');
+      toggleIcon.textContent = '▾';
+      return;
+    }
+
+    calcBtn.disabled = true;
+    renderLoading();
+
+    try {
+      const [originPlace, destPlace] = await Promise.all([
+        resolveField('origin', originQuery),
+        resolveField('dest', destQuery)
+      ]);
+
+      if (!originPlace || !destPlace) {
+        // One or both fields have multiple candidates awaiting user selection.
+        resultArea.innerHTML = '';
+        return;
+      }
+
+      const km = await routeDistanceKm(originPlace, destPlace, savedApiKey);
+      const { rounded, fare } = lookupFare(km);
+
+      renderResult({
+        originLabel: originPlace.label,
+        destLabel: destPlace.label,
+        km, rounded, fare
+      });
+    } catch (err) {
+      renderError(err.message || '計算中にエラーが発生しました。');
+    } finally {
+      calcBtn.disabled = false;
+    }
+  });
+
+  originInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') calcBtn.click(); });
+  destInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') calcBtn.click(); });
+</script>
+</body>
+</html>
